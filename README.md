@@ -1,4 +1,4 @@
-# Drawring Game (simple web prototype)
+# Drawing Game (simple web prototype)
 
 Click to place colored blocks on a grid. Right-click a cell to clear it.
 
