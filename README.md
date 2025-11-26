@@ -1,1 +1,237 @@
+# Block Placer (simple web prototype)
+
+Click to place colored blocks on a grid. Right-click a cell to clear it.
+
+Files:
+- `index.html` — main page
+- `style.css` — styles
+- `app.js` — grid and palette logic
+
+How to run:
+Open `index.html` in your browser, or serve the folder locally:
+
+```bash
+cd /workspaces/peterhe518-cpu.github.io
+python3 -m http.server 8000
+# then open http://localhost:8000 in your browser
+```
+
+Notes:
+- Use the palette to choose colors. Click cells to paint them.
+- Change grid size with the input (4–64).
 # peterhe518-cpu.github.io
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sandbox Game</title>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #222;
+  cursor: none;
+  height: 100%;
+  width: 100%;
+  font-family: Arial;
+}
+#ui {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.6);
+  padding: 10px;
+  border-radius: 8px;
+  color: #fff;
+  z-index: 100;
+}
+#ui input { margin-top: 6px; }
+#cursor-ring {
+  position: absolute;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+}
+canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+#block-selection {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  z-index: 100;
+}
+.block {
+  width: 30px;
+  height: 30px;
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+.block.selected {
+  border-color: yellow;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <label>Brush Colour: <input type="color" id="colour" value="#ffffff"></label><br>
+  <label>Brush Size: <input type="range" id="size" min="2" max="50" value="10"></label><br>
+  <button id="brush">Brush</button>
+  <button id="eraser">Eraser</button>
+  <button id="save">Save PNG</button>
+</div>
+
+<div id="block-selection">
+  <div class="block selected" style="background: #4ade80;" data-color="#4ade80"></div>
+  <div class="block" style="background: #f87171;" data-color="#f87171"></div>
+  <div class="block" style="background: #60a5fa;" data-color="#60a5fa"></div>
+  <div class="block" style="background: #facc15;" data-color="#facc15"></div>
+</div>
+
+<div id="cursor-ring"></div>
+<canvas id="bgCanvas"></canvas>
+<canvas id="fgCanvas"></canvas>
+
+<script>
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+const fgCanvas = document.getElementById('fgCanvas');
+const fgCtx = fgCanvas.getContext('2d');
+const cursorRing = document.getElementById('cursor-ring');
+
+// Resize canvases
+function resizeCanvas() {
+  bgCanvas.width = fgCanvas.width = window.innerWidth;
+  bgCanvas.height = fgCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Player cube
+const player = { x: 100, y: 100, size: 30, speed: 4, color: "#4ade80" };
+
+// Keyboard input
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+// Drawing
+let drawing = false;
+let brushColour = document.getElementById('colour').value;
+let brushSize = parseInt(document.getElementById('size').value);
+let lastBrushColour = brushColour;
+
+const colourInput = document.getElementById('colour');
+const sizeInput = document.getElementById('size');
+const brushBtn = document.getElementById('brush');
+const eraserBtn = document.getElementById('eraser');
+const saveBtn = document.getElementById('save');
+
+colourInput.oninput = () => {
+  brushColour = colourInput.value;
+  lastBrushColour = brushColour;
+};
+sizeInput.oninput = () => {
+  brushSize = parseInt(sizeInput.value);
+  cursorRing.style.width = brushSize + 'px';
+  cursorRing.style.height = brushSize + 'px';
+};
+
+eraserBtn.onclick = () => {
+  brushColour = '#222';
+};
+brushBtn.onclick = () => {
+  brushColour = lastBrushColour;
+};
+
+// Mouse
+let mouseX = 0, mouseY = 0;
+
+fgCanvas.addEventListener('mousemove', e => {
+  const rect = fgCanvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left;
+  mouseY = e.clientY - rect.top;
+  
+  cursorRing.style.left = e.clientX + 'px';
+  cursorRing.style.top = e.clientY + 'px';
+
+  if(drawing) drawDot(mouseX, mouseY);
+});
+
+fgCanvas.addEventListener('mousedown', e => { if(e.button === 0) drawing = true; });
+fgCanvas.addEventListener('mouseup', e => { if(e.button === 0) drawing = false; });
+
+function drawDot(x, y) {
+  bgCtx.fillStyle = brushColour;
+  bgCtx.beginPath();
+  bgCtx.arc(x, y, brushSize/2, 0, Math.PI*2);
+  bgCtx.fill();
+}
+
+// Save drawing
+saveBtn.onclick = () => {
+  const link = document.createElement('a');
+  link.download = 'drawing.png';
+  link.href = bgCanvas.toDataURL();
+  link.click();
+};
+
+// Player movement with collision
+function updatePlayer() {
+  if(keys["w"]||keys["ArrowUp"]) player.y -= player.speed;
+  if(keys["s"]||keys["ArrowDown"]) player.y += player.speed;
+  if(keys["a"]||keys["ArrowLeft"]) player.x -= player.speed;
+  if(keys["d"]||keys["ArrowRight"]) player.x += player.speed;
+
+  // Collision with edges
+  if(player.x < 0) player.x = 0;
+  if(player.y < 0) player.y = 0;
+  if(player.x + player.size > fgCanvas.width) player.x = fgCanvas.width - player.size;
+  if(player.y + player.size > fgCanvas.height) player.y = fgCanvas.height - player.size;
+}
+
+// Draw foreground (player only)
+function drawForeground() {
+  fgCtx.clearRect(0, 0, fgCanvas.width, fgCanvas.height);
+  fgCtx.fillStyle = player.color;
+  fgCtx.fillRect(player.x, player.y, player.size, player.size);
+}
+
+// Main loop
+function loop() {
+  updatePlayer();
+  drawForeground();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// Initialize cursor ring
+cursorRing.style.width = brushSize + 'px';
+cursorRing.style.height = brushSize + 'px';
+
+// Block selection
+const blocks = document.querySelectorAll('.block');
+blocks.forEach(block => {
+  block.addEventListener('click', () => {
+    blocks.forEach(b => b.classList.remove('selected'));
+    block.classList.add('selected');
+    player.color = block.dataset.color;
+    lastBrushColour = block.dataset.color;
+    brushColour = lastBrushColour;
+    colourInput.value = lastBrushColour;
+  });
+});
+</script>
+
+</body>
+</html>
